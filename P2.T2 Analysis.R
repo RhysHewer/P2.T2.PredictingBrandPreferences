@@ -236,8 +236,10 @@ model.RF.brand.tune <- train(brand ~ ., data = training,
 model.RF.brand.tune
 
 ## Deploy RF model on concentrated feature set
+tGridRF.conc <- expand.grid(mtry = c(1,2,3,4,5,6))
 model.RF.brand.conc <- train(brand ~ ., data = training.conc, 
-                         method = "rf", trControl = fitControl)
+                         method = "rf", trControl = fitControl,
+                         tuneGrid = tGridRF.conc)
 model.RF.brand.conc 
 varImp(model.RF.brand.conc)
 
@@ -250,5 +252,34 @@ confMatrixRF <- confusionMatrix(testing$brand, testing$predictions.RF)
 confMatrixRF
 fourfoldplot(confMatrixRF$table, conf.level = 0, margin = 1, main = "Confusion Matrix RF")
 
+
+##GBM
+model.GBM.brand <- train(brand ~ ., data = training, 
+                         method = "gbm", trControl = fitControl,
+                         verbose = FALSE)
+model.GBM.brand
+
+#concentrated featureset
+tGridGBM <- expand.grid(n.trees = c(150,200,250), 
+                        interaction.depth = c(3,4), shrinkage = 0.1, 
+                        n.minobsinnode = c(5,10))
+
+model.GBM.brand.conc <- train(brand ~ ., data = training.conc, 
+                             method = "gbm", trControl = fitControl,
+                             verbose = FALSE, tuneGrid = tGridGBM)
+model.GBM.brand.conc 
+
+## Test GBM
+predictions.GBM <- predict(model.GBM.brand.conc, testing)
+testing$predictions.GBM <- predictions.GBM
+
+#Confusion matrix
+confMatrixGBM <- confusionMatrix(testing$brand, testing$predictions.GBM)
+confMatrixGBM
+fourfoldplot(confMatrixGBM$table, conf.level = 0, margin = 1, main = "Confusion Matrix GBM")
+
+confMatrixGBM$overall[1:2]
+confMatrixRF$overall[1:2]
+confMatrixKNN$overall[1:2]
 
 

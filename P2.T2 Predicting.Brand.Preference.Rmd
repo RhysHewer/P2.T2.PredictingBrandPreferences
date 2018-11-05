@@ -383,7 +383,7 @@ finalKNN <- train(brand ~ ., data = training.conc,
 finalKNN
 ```
 
-By tuning the model I was able to increase the accuracy on the training sent to 91% and the Kappa to 0.78. This brings concerns of overfitting. 
+By tuning the model I was able to increase the accuracy on the training sent to 93% and the Kappa to 0.83. This brings concerns of overfitting. 
 
 
 ### Testing KNN
@@ -397,7 +397,7 @@ testing$predictions.KNN <- predictions.KNN
 #Confusion matrix
 confMatrixKNN <- confusionMatrix(testing$brand, testing$predictions.KNN)
 confMatrixKNN
-fourfoldplot(confMatrix$table, conf.level = 0, margin = 1, main = "Confusion Matrix KNN")
+fourfoldplot(confMatrixKNN$table, conf.level = 0, margin = 1, main = "Confusion Matrix KNN")
 ```
 
 The Accuracy of the model on the test set was 87% with a kappa of 0.72. These seem to be satisfactory outcomes. Reviewing the confusion matrix we see that the model is doing a fairly good job of classifying brand preference with a slight tendency to overpredict brand 0.
@@ -419,12 +419,15 @@ model.RF.brand.tune
 #### Random Forest on concentrated feature set
 ```{r}
 ## Deploy RF model on concentrated feature set
+tGridRF.conc <- expand.grid(mtry = c(1,2,3,4,5,6))
 model.RF.brand.conc <- train(brand ~ ., data = training.conc, 
-                         method = "rf", trControl = fitControl)
+                         method = "rf", trControl = fitControl,
+                         tuneGrid = tGridRF.conc)
 model.RF.brand.conc 
 varImp(model.RF.brand.conc)
-
 ```
+
+The Accuracy of the best Random Forest model was 90% with a Kappa of 0.75. These seem like acceptable values although there is the possibility of overfitting. 
 
 ### Testing Random Forest
 
@@ -439,7 +442,58 @@ confMatrixRF
 fourfoldplot(confMatrixRF$table, conf.level = 0, margin = 1, main = "Confusion Matrix RF")
 ```
 
+Random Forest gives an Accuracy of 86% and a kappa of 0.69. 
+
+## Modelling Gradient Boosted Machine
+
+### Training GBM {.tabset}
+
+#### GBM on Full Featureset
+```{r}
+##GBM
+model.GBM.brand <- train(brand ~ ., data = training, 
+                         method = "gbm", trControl = fitControl,
+                         verbose = FALSE)
+model.GBM.brand
+```
+
+
+#### GBM on Condensed Featureset
+```{r}
+#concentrated featureset
+tGridGBM <- expand.grid(n.trees = c(150,200,250), 
+                        interaction.depth = c(3,4), shrinkage = 0.1, 
+                        n.minobsinnode = c(5,10))
+
+model.GBM.brand.conc <- train(brand ~ ., data = training.conc, 
+                             method = "gbm", trControl = fitControl,
+                             verbose = FALSE, tuneGrid = tGridGBM)
+model.GBM.brand.conc 
+```
+
+The best result for the tuned GBM model on the training set was Accuracy of 87% and 0.67 for Kappa.
+
+### Testing GBM
+
+```{r}
+## Test GBM
+predictions.GBM <- predict(model.GBM.brand.conc, testing)
+testing$predictions.GBM <- predictions.GBM
+
+#Confusion matrix
+confMatrixGBM <- confusionMatrix(testing$brand, testing$predictions.GBM)
+confMatrixGBM
+fourfoldplot(confMatrixGBM$table, conf.level = 0, margin = 1, main = "Confusion Matrix GBM")
+
+```
+
+For the GBM applied to the test set, the Accuracy was 86% with a Kappa of 0.71.
+
 ## Modelling Conclusions
+
+### Model Comparisons
+
+
 
 # **Conclusions**
 

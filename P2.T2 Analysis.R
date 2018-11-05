@@ -6,6 +6,8 @@ library(RColorBrewer)
 library(corrplot)
 library(caret)
 library(tidyr)
+library(parallel)
+library(doParallel)
 
 #read in data
 setwd("C:/Users/rhysh/Google Drive/Data Science/Ubiqum/Project 2/Task 2")
@@ -22,10 +24,6 @@ data %>% sample_n(5)
 str(incomplete) 
 str(data)
 
-##datasets are sufficiently similar. Will take the strategy of training, test and validation sets. 
-##Training and testing from the complete responses. Validation from the incomplete responses.
-##Remaining EDA on complete data but will need to perform same transformations on validation data prior to modelling this.
-##need to combine sets at end!!!
 
 #check for NAs
 data %>% is.na() %>% sum()
@@ -135,6 +133,22 @@ nzv <- data %>% nearZeroVar(saveMetrics = TRUE)
 nzv
 
 
-##Preliminary Hypothesis!!!!
+## Modelling
 
+#Creating Testing/Training sets
+set.seed(111)
+trainIndex <- createDataPartition(iris$Species, p = 0.75, list = FALSE)
+training <- data[ trainIndex,]
+testing  <- data[-trainIndex,]
+
+#set up parallel processing (requires parallel and doParallel libraries)
+cluster <- makeCluster(detectCores() - 1) # convention to leave 1 core for OS
+registerDoParallel(cluster)
+
+#Cross Validation 10 fold
+fitControl<- trainControl(method = "cv", number = 10, savePredictions = TRUE, allowParallel = TRUE)
+
+##KNN
+# Deploy KNN model
+model.KNN. <- train(dependent.variable ~ ., data = training, method = "rf", trControl = fitControl)
 

@@ -45,6 +45,10 @@ library(corrplot)
 library(caret)
 library(tidyr)
 library(kableExtra)
+library(parallel)
+library(doParallel)
+library(rattle)
+library(rpart)
 ```
 ```{r}
 #read in data
@@ -78,10 +82,10 @@ str(data)
 
 Looking at the structure shows that a few changes are needed in respect of the data types.
 
-Overall, however, the datasets are sufficiently similar. I will take the strategy of splitting into training, test and validation sets. 
-The training and testing sets will come from the complete responses data. Validation from the incomplete responses.
+Overall, however, the datasets are sufficiently similar. I will take the strategy of splitting into training, test and final prediction sets. 
+The training and testing sets will come from the complete responses data. Final prediction from the incomplete responses.
 
-The exploratory data analysis will be performed on the complete data but any data transformations taking place on the training/testing sets will also need to be made on the validation data prior to modelling this.
+The exploratory data analysis will be performed on the complete data but any data transformations taking place on the training/testing sets will also need to be made on the Final prediction data prior to modelling this.
 
 
 ```{r}
@@ -130,7 +134,7 @@ g6 <- ggplot(data, aes(brand, fill = brand)) +
 g6
 ```
 
-We see a clear preference for brand 1 over brand 0. 
+* We see a clear preference for brand 1 over brand 0. 
 
 ### Histogram of other variables
 ```{r}
@@ -146,7 +150,7 @@ g8 <- ggplot(gather(histData), aes(value)) +
 g8
 ```
 
-Across the remaining features we see no extreme skewing or noteworthy patterns.
+* Across the remaining features we see no extreme skewing or noteworthy patterns.
 
 ## Brand Choice Plotting {.tabset}
 
@@ -164,7 +168,7 @@ g1 <- ggplotly(g1)
 g1
 ```
 
-There is a clear pattern: salaries ranging between 45k - 100k seem to have a preference for brand 0. Salaries outside of this range seem to have a preference for brand 1.
+* There is a clear pattern: salaries ranging between 45k - 100k seem to have a preference for brand 0. Salaries outside of this range seem to have a preference for brand 1.
 
 ### Brand Choice v Age
 ```{r}
@@ -179,7 +183,7 @@ g2 <- ggplotly(g2)
 g2
 ```
 
-There is no noteworthy pattern between brand preference and age.
+* There is no noteworthy pattern between brand preference and age.
 
 ### Brand Choice v Education Level
 ```{r}
@@ -193,7 +197,7 @@ g3 <- ggplot(data, aes(brand, elevel, colour = brand)) +
 g3
 ```
 
-The general preference for brand 1 is shown in this plot but there also seems to be a consistent preference for brand 1 regardless of education level whereas there seems to be more variation within preference for brand 0 based on the education level.
+* The general preference for brand 1 is shown in this plot but there also seems to be a consistent preference for brand 1 regardless of education level whereas there seems to be more variation within preference for brand 0 based on the education level.
 
 ### Brand Choice v Car 
 ```{r}
@@ -207,7 +211,7 @@ g4 <- ggplot(data, aes(brand, car, colour = brand)) +
 g4
 ```
 
-The general preference for brand 1 is shown in this plot but there also seems to be a consistent preference for brand 1 regardless of car whereas there seems to be more variation within preference for brand 0 based on the car owned.
+* The general preference for brand 1 is shown in this plot but there also seems to be a consistent preference for brand 1 regardless of car whereas there seems to be more variation within preference for brand 0 based on the car owned.
 
 ### Brand Choice v Zip Code
 ```{r}
@@ -221,7 +225,7 @@ g5 <- ggplot(data, aes(brand, zipcode, colour = brand)) +
 g5
 ```
 
-The general preference for brand 1 is shown in this plot but there also seems to be a consistent preference for brand 1 regardless of zip code whereas there seems to be more variation within preference for brand 0 based on the car owned.
+* The general preference for brand 1 is shown in this plot but there also seems to be a consistent preference for brand 1 regardless of zip code whereas there seems to be more variation within preference for brand 0 based on the car owned.
 
 ### Brand Choice v Credit
 ```{r}
@@ -236,9 +240,47 @@ g7 <- ggplotly(g7)
 g7
 ```
 
-There is no noteworthy pattern between brand preference and credit.
+* There is no noteworthy pattern between brand preference and credit.
 
-## Feature Correlation
+## Initial Hypothesis
+
+There is a general preference for brand 1 and salary seems the key feature.
+
+Age and credit seem to have very limited influence on brand preference. Whilst there are patterns of preference within education level, car and zip code, salary appears to have the most striking impact.
+
+Salaries ranging between 45k - 100k seem to have a preference for brand 0. Salaries outside of this range seem to have a preference for brand 1.
+
+
+## Feature Selection
+
+### Decision Tree Variable Importance
+
+We can review the initial hypothesis and provide some information on which to make feature selection decisions using a decision tree.
+
+```{r}
+featureDT <- rpart(brand ~ ., data = data)
+featureDT$variable.importance
+fancyRpartPlot(featureDT)
+```
+
+The decision tree is formed exclusively of age and salary, suggesting these are the key features. This is reinforced by the variable importance information from within the model. 
+
+### Supplementary Exploratory Data Analysis
+
+```{r}
+g12 <- ggplot(data, aes(salary, age, colour = brand)) +
+        geom_smooth() +
+        facet_grid(brand ~ .) +
+        theme_bw() +
+        scale_color_brewer(palette="Dark2") +
+        xlab("Salary") + 
+        ylab("Age") + 
+        ggtitle("Salary v Age by Brand Preference")
+g12
+```
+
+
+### Colinearity and Variance
 ```{r}
 ##Review correlation matrix
 corrMatrix <- origdata %>% cor()
@@ -255,17 +297,31 @@ nzv
 
 There are no features with near zero variance.
 
+### Feature Selection Conclusion
 
 
-## Initial Hypothesis
 
-There is a general preference for brand 1 and salary seems the key feature.
 
-Age and credit seem to have very limited influence on brand preference. Whilst there are patterns of preference within education level, car and zip code, salary appears to have the most striking impact.
-
-Salaries ranging between 45k - 100k seem to have a preference for brand 0. Salaries outside of this range seem to have a preference for brand 1.
 
 # **Modelling**
+
+## Modelling Preparation
+
+```{r}
+#Creating Testing/Training sets
+set.seed(111)
+trainIndex <- createDataPartition(iris$Species, p = 0.75, list = FALSE)
+training <- data[ trainIndex,]
+testing  <- data[-trainIndex,]
+
+#set up parallel processing (requires parallel and doParallel libraries)
+cluster <- makeCluster(detectCores() - 1) # convention to leave 1 core for OS
+registerDoParallel(cluster)
+
+#Cross Validation 10 fold
+fitControl<- trainControl(method = "cv", number = 10, savePredictions = TRUE, allowParallel = TRUE)
+```
+
 
 ## Modelling K-Nearest Neighbour
 

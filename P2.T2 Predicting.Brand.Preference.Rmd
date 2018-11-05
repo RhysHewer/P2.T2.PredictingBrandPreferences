@@ -269,7 +269,7 @@ The decision tree is formed exclusively of age and salary, suggesting these are 
 
 ```{r}
 g12 <- ggplot(data, aes(salary, age, colour = brand)) +
-        geom_smooth() +
+        geom_point(show.legend = FALSE) +
         facet_grid(brand ~ .) +
         theme_bw() +
         scale_color_brewer(palette="Dark2") +
@@ -279,6 +279,9 @@ g12 <- ggplot(data, aes(salary, age, colour = brand)) +
 g12
 ```
 
+We see that the interaction of age and salary do play a role in brand preference. There are clearly defined blocks of preference depending on age and salary. For example, between ages 60-80 earning between 25k-80k have a distinct preference for brand 0.
+
+I have updated the initial hypothesis to now consider that age and salary are the key features in determining brand preference.
 
 ### Colinearity and Variance
 ```{r}
@@ -299,10 +302,10 @@ There are no features with near zero variance.
 
 ### Feature Selection Conclusion
 
+The Random Forest algorithm has built-in feature selection so no feature selection required from that perspective.
 
-
-
-
+For KNN I will take both a fully-featured dataset and a concentrated dataset (brand, salary, age) into the modelling phase and compare results.
+ 
 # **Modelling**
 
 ## Modelling Preparation
@@ -311,25 +314,130 @@ There are no features with near zero variance.
 #Creating Testing/Training sets
 set.seed(111)
 trainIndex <- createDataPartition(iris$Species, p = 0.75, list = FALSE)
+
 training <- data[ trainIndex,]
 testing  <- data[-trainIndex,]
 
+concData <- data %>% select(brand, age, salary)
+training.conc <- concData[ trainIndex,]
+testing.conc <- concData[-trainIndex,]
+
 #set up parallel processing (requires parallel and doParallel libraries)
-cluster <- makeCluster(detectCores() - 1) # convention to leave 1 core for OS
+cluster <- makeCluster(detectCores() - 1) 
 registerDoParallel(cluster)
 
 #Cross Validation 10 fold
 fitControl<- trainControl(method = "cv", number = 10, savePredictions = TRUE, allowParallel = TRUE)
 ```
 
+A test and traing set are created with all features. An additional training set is created with just Brand, Age and Salary. 10-fold cross validation is being used and parallel processing is being leveraged.
 
-## Modelling K-Nearest Neighbour
+## Modelling K-Nearest Neighbour 
 
-### Data Transformations
+### Training KNN {.tabset}
 
-Normalisation of data
+#### KNN - All Features
+```{r}
+# Deploy KNN model 
+model.KNN.brand <- train(brand ~ ., data = training, 
+                         method = "knn", trControl = fitControl)
+model.KNN.brand
+```
+
+#### KNN - Concentrated Features
+```{r}
+# Deploy KNN model with concentrated feature set
+model.KNN.brand.conc <- train(brand ~ ., data = training.conc, 
+                              method = "knn", trControl = fitControl)
+model.KNN.brand.conc
+```
+
+#### KNN - All Features, Scaled and Centred
+```{r}
+# Deploy KNN model with scaled features
+model.KNN.brand.scale <- train(brand ~ ., data = training, 
+                         method = "knn", trControl = fitControl, 
+                         preProcess = c("center", "scale"))
+model.KNN.brand.scale
+```
+
+
+#### KNN - Concentrated Features, Scaled and Centred
+```{r}
+# Deploy KNN model with scaled features and concentrated feature set
+model.KNN.brand.conc.scale <- train(brand ~ ., data = training.conc, 
+                              method = "knn", trControl = fitControl, 
+                              preProcess = c("center", "scale"))
+model.KNN.brand.conc.scale
+```
+
+#### KNN - best model tuned
+
+```{r}
+#tune best KNN model further
+tGridKNN <- expand.grid(k = c(1,2,3,4,5,6))
+finalKNN <- train(brand ~ ., data = training.conc,
+                  method = "knn", trControl = fitControl,
+                  preProcess = c("center", "scale"),
+                  tuneGrid = tGridKNN)
+finalKNN
+```
+
+By tuning the model I was able to increase the accuracy on the training sent to 91% and the Kappa to 0.78. This brings concerns of overfitting. 
+
+
+### Testing KNN
+
+```{r}
+#Predictions on the test set (model = model name, testing = test set)
+predictions.KNN <- predict(finalKNN, testing)
+testing$predictions.KNN <- predictions.KNN
+
+
+#Confusion matrix
+confMatrixKNN <- confusionMatrix(testing$brand, testing$predictions.KNN)
+confMatrixKNN
+fourfoldplot(confMatrix$table, conf.level = 0, margin = 1, main = "Confusion Matrix KNN")
+```
+
+The Accuracy of the model on the test set was 87% with a kappa of 0.72. These seem to be satisfactory outcomes. Reviewing the confusion matrix we see that the model is doing a fairly good job of classifying brand preference with a slight tendency to overpredict brand 0.
 
 ## Modelling Random Forest
+
+### Training Random Forest {.tabset}
+
+#### Random Forest on full feature set
+```{r}
+# Deploy RF model 
+tGridRF <- expand.grid(mtry = c(24,30,35))
+model.RF.brand.tune <- train(brand ~ ., data = training, 
+                        method = "rf", trControl = fitControl,
+                        tuneGrid = tGridRF)
+model.RF.brand.tune
+```
+
+#### Random Forest on concentrated feature set
+```{r}
+## Deploy RF model on concentrated feature set
+model.RF.brand.conc <- train(brand ~ ., data = training.conc, 
+                         method = "rf", trControl = fitControl)
+model.RF.brand.conc 
+varImp(model.RF.brand.conc)
+
+```
+
+### Testing Random Forest
+
+```{r}
+## Test Random Forest
+predictions.RF <- predict(model.RF.brand.conc, testing)
+testing$predictions.RF <- predictions.RF
+
+#Confusion matrix
+confMatrixRF <- confusionMatrix(testing$brand, testing$predictions.RF)
+confMatrixRF
+fourfoldplot(confMatrixRF$table, conf.level = 0, margin = 1, main = "Confusion Matrix RF")
+```
 
 ## Modelling Conclusions
 

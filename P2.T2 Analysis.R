@@ -8,6 +8,7 @@ library(caret)
 library(tidyr)
 library(parallel)
 library(doParallel)
+library(rattle)
 
 #read in data
 setwd("C:/Users/rhysh/Google Drive/Data Science/Ubiqum/Project 2/Task 2")
@@ -41,6 +42,13 @@ outliers <- numericVars %>% sapply(function(x) boxplot(x, plot=FALSE)$out) %>% s
 
 #EDA
 
+##QQ plots
+par(mfrow = c(1,3))
+qqnorm(data$salary, main = "QQ plot Salary")
+qqnorm(data$age, main = "QQ plot Age")
+qqnorm(data$credit, main = "QQ plot Credit")
+
+##Density plots
 
 
 ##Key feature is brand preference, begin with exploring this value.
@@ -124,6 +132,7 @@ g7 <- ggplot(data, aes(brand, credit, fill = brand)) +
 g7 <- ggplotly(g7)
 g7
 
+
 ##Review correlation matrix
 corrMatrix <- origdata %>% cor()
 corrMatrix %>% corrplot.mixed()
@@ -132,6 +141,27 @@ corrMatrix %>% corrplot.mixed()
 nzv <- data %>% nearZeroVar(saveMetrics = TRUE)
 nzv
 
+#Feature Selection Decision Tree
+##decision tree
+featureDT <- rpart(brand ~ ., data = data)
+fancyRpartPlot(featureDT)
+featureDT$variable.importance
+
+
+##explore brand, age, salary
+plot(data$age, data$salary)
+
+g12 <- ggplot(data, aes(salary, age, colour = brand)) +
+        geom_point(show.legend = FALSE) +
+        facet_grid(brand ~ .) +
+        theme_bw() +
+        scale_color_brewer(palette="Dark2") +
+        xlab("Salary") + 
+        ylab("Age") + 
+        ggtitle("Salary v Age by Brand Preference")
+g12
+
+                      
 
 ## Modelling
 
@@ -141,6 +171,10 @@ trainIndex <- createDataPartition(iris$Species, p = 0.75, list = FALSE)
 training <- data[ trainIndex,]
 testing  <- data[-trainIndex,]
 
+concData <- data %>% select(brand, age, salary)
+training.conc <- concData[ trainIndex,]
+
+
 #set up parallel processing (requires parallel and doParallel libraries)
 cluster <- makeCluster(detectCores() - 1) # convention to leave 1 core for OS
 registerDoParallel(cluster)
@@ -148,7 +182,73 @@ registerDoParallel(cluster)
 #Cross Validation 10 fold
 fitControl<- trainControl(method = "cv", number = 10, savePredictions = TRUE, allowParallel = TRUE)
 
+
 ##KNN
-# Deploy KNN model
-model.KNN. <- train(dependent.variable ~ ., data = training, method = "rf", trControl = fitControl)
+# Deploy KNN model 
+model.KNN.brand <- train(brand ~ ., data = training, 
+                         method = "knn", trControl = fitControl)
+model.KNN.brand
+
+# Deploy KNN model with concentrated feature set
+model.KNN.brand.conc <- train(brand ~ ., data = training.conc, 
+                              method = "knn", trControl = fitControl)
+model.KNN.brand.conc
+
+# Deploy KNN model with scaled features
+model.KNN.brand.scale <- train(brand ~ ., data = training, 
+                         method = "knn", trControl = fitControl, 
+                         preProcess = c("center", "scale"))
+model.KNN.brand.scale
+
+# Deploy KNN model with scaled features and concentrated feature set
+model.KNN.brand.conc.scale <- train(brand ~ ., data = training.conc, 
+                              method = "knn", trControl = fitControl, 
+                              preProcess = c("center", "scale"))
+model.KNN.brand.conc.scale
+
+#tune best KNN model further
+tGridKNN <- expand.grid(k = c(1,2,3,4,5,6))
+finalKNN <- train(brand ~ ., data = training.conc,
+                  method = "knn", trControl = fitControl,
+                  preProcess = c("center", "scale"),
+                  tuneGrid = tGridKNN)
+finalKNN
+
+
+#test KNN model
+#Predictions on the test set (model = model name, testing = test set)
+predictions.KNN <- predict(finalKNN, testing)
+testing$predictions.KNN <- predictions.KNN
+
+
+#Confusion matrix
+confMatrixKNN <- confusionMatrix(testing$brand, testing$predictions.KNN)
+confMatrixKNN
+fourfoldplot(confMatrix$table, conf.level = 0, margin = 1, main = "Confusion Matrix KNN")
+
+
+## Random Forest
+# Deploy RF model 
+tGridRF <- expand.grid(mtry = c(24,30,35))
+model.RF.brand.tune <- train(brand ~ ., data = training, 
+                        method = "rf", trControl = fitControl,
+                        tuneGrid = tGridRF)
+model.RF.brand.tune
+
+## Deploy RF model on concentrated feature set
+model.RF.brand.conc <- train(brand ~ ., data = training.conc, 
+                         method = "rf", trControl = fitControl)
+model.RF.brand.conc 
+varImp(model.RF.brand.conc)
+
+## Test Random Forest
+predictions.RF <- predict(model.RF.brand.conc, testing)
+testing$predictions.RF <- predictions.RF
+
+#Confusion matrix
+confMatrixRF <- confusionMatrix(testing$brand, testing$predictions.RF)
+confMatrixRF
+fourfoldplot(confMatrixRF$table, conf.level = 0, margin = 1, main = "Confusion Matrix RF")
+
+
 

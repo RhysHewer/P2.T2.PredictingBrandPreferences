@@ -48,7 +48,6 @@ qqnorm(data$salary, main = "QQ plot Salary")
 qqnorm(data$age, main = "QQ plot Age")
 qqnorm(data$credit, main = "QQ plot Credit")
 
-##Density plots
 
 
 ##Key feature is brand preference, begin with exploring this value.
@@ -65,7 +64,7 @@ g6
 ##review other histograms for skewdness
 histData <- origdata %>% select(-brand)
 g8 <- ggplot(gather(histData), aes(value)) + 
-        geom_histogram(bins = 10, fill = "#D95F02", colour = "white") + 
+        geom_histogram(bins = 20, fill = "#D95F02", colour = "white") + 
         theme_bw() +
         facet_wrap(~key, scales = 'free_x') +
         xlab("Value") + 
@@ -161,7 +160,7 @@ g12 <- ggplot(data, aes(salary, age, colour = brand)) +
         ggtitle("Salary v Age by Brand Preference")
 g12
 
-                      
+        
 
 ## Modelling
 
@@ -224,11 +223,12 @@ testing$predictions.KNN <- predictions.KNN
 #Confusion matrix
 confMatrixKNN <- confusionMatrix(testing$brand, testing$predictions.KNN)
 confMatrixKNN
-fourfoldplot(confMatrix$table, conf.level = 0, margin = 1, main = "Confusion Matrix KNN")
+fourfoldplot(confMatrixKNN$table, conf.level = 0, margin = 1, main = "Confusion Matrix KNN")
 
 
 ## Random Forest
 # Deploy RF model 
+set.seed(111)
 tGridRF <- expand.grid(mtry = c(24,30,35))
 model.RF.brand.tune <- train(brand ~ ., data = training, 
                         method = "rf", trControl = fitControl,
@@ -267,7 +267,9 @@ tGridGBM <- expand.grid(n.trees = c(150,200,250),
 model.GBM.brand.conc <- train(brand ~ ., data = training.conc, 
                              method = "gbm", trControl = fitControl,
                              verbose = FALSE, tuneGrid = tGridGBM)
-model.GBM.brand.conc 
+
+model.GBM.brand.conc
+
 
 ## Test GBM
 predictions.GBM <- predict(model.GBM.brand.conc, testing)
@@ -283,3 +285,9 @@ confMatrixRF$overall[1:2]
 confMatrixKNN$overall[1:2]
 
 
+#create results table
+mNam <- c("KNN", "RF", "GBM")
+Acc <- c(confMatrixGBM$overall[1],confMatrixRF$overall[1],confMatrixKNN$overall[1])
+Kap <- c(confMatrixGBM$overall[2],confMatrixRF$overall[2],confMatrixKNN$overall[2])
+modelResults <- data.frame(mNam,Acc,Kap)
+colnames(modelResults) <- c("Model", "Accuracy", "Kappa")

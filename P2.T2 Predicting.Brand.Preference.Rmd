@@ -141,7 +141,7 @@ g6
 ##review other histograms for skewdness
 histData <- origdata %>% select(-brand)
 g8 <- ggplot(gather(histData), aes(value)) + 
-        geom_histogram(bins = 10, fill = "#D95F02", colour = "white") + 
+        geom_histogram(bins = 20, fill = "#D95F02", colour = "white") + 
         theme_bw() +
         facet_wrap(~key, scales = 'free_x') +
         xlab("Value") + 
@@ -493,7 +493,21 @@ For the GBM applied to the test set, the Accuracy was 86% with a Kappa of 0.71.
 
 ### Model Comparisons
 
+```{r}
+#create results table
+mNam <- c("KNN", "RF", "GBM")
+Acc <- c(confMatrixGBM$overall[1],confMatrixRF$overall[1],confMatrixKNN$overall[1])
+Kap <- c(confMatrixGBM$overall[2],confMatrixRF$overall[2],confMatrixKNN$overall[2])
+modelResults <- data.frame(mNam,Acc,Kap)
+colnames(modelResults) <- c("Model", "Accuracy", "Kappa")
+
+kable(modelResults) %>%
+        kable_styling(bootstrap_options = "striped", full_width = F, position = "left")
+```
+
+### Predicting Brand Preference
 
 
 # **Conclusions**
 
+## Final Combined Data

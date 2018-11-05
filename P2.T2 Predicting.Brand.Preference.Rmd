@@ -1,0 +1,281 @@
+---
+output:
+  html_document:
+    code_folding: hide
+    number_sections: yes
+    theme: cosmo
+    toc: yes
+    toc_float: yes
+---
+<style type="text/css">
+body .main-container {
+  margin-left: 1%;
+  margin-right: 1%;
+  max-width: 1350px;
+}
+.jumbotron {
+    background-color: #86b0e0!important;
+    
+}
+</style>
+
+<div class="jumbotron">
+  <h1>Classifying Brand Preference</h1>
+  <p>Rhys Hewer</p>
+</div>
+
+# **Executive Summary**
+
+REMEMBER!! Combine the data sets at the end!
+
+## Objective
+## Method
+## Findings
+## Recommendations
+
+# **Initial Data Processing**
+```{r message=FALSE}
+#load libraries
+library(readxl)
+library(dplyr)
+library(ggplot2)
+library(plotly)
+library(RColorBrewer)
+library(corrplot)
+library(caret)
+library(tidyr)
+library(kableExtra)
+```
+```{r}
+#read in data
+setwd("C:/Users/rhysh/Google Drive/Data Science/Ubiqum/Project 2/Task 2")
+incomplete <- read.csv("SurveyIncomplete.csv")
+origdata <- read_xlsx("Survey_Key_and_Complete_Responses_excel.xlsx", sheet = 2)
+data <- origdata
+```
+
+As we are working across 2 spreadsheets it is important to check to see if they are structured alike or whether manipulation will be required to ensure they have the same features.
+
+
+```{r}
+#Check structure of data to see if alike
+names(incomplete) == names(data)
+```
+
+The features match between the spreadsheets so no data manipulation is needed in that respect.
+
+```{r}
+incomplete %>% sample_n(5)
+data %>% sample_n(5) 
+```
+
+A quick look at a sample from both spreadsheets shows that they are very similar in composition.
+
+```{r}
+str(incomplete)
+str(data)
+```
+
+Looking at the structure shows that a few changes are needed in respect of the data types.
+
+Overall, however, the datasets are sufficiently similar. I will take the strategy of splitting into training, test and validation sets. 
+The training and testing sets will come from the complete responses data. Validation from the incomplete responses.
+
+The exploratory data analysis will be performed on the complete data but any data transformations taking place on the training/testing sets will also need to be made on the validation data prior to modelling this.
+
+
+```{r}
+#check for NAs
+data %>% is.na() %>% sum()
+incomplete %>% is.na() %>% sum()
+```
+
+There are no missing values in either data set.
+
+```{r}
+#data types
+data$elevel <- data$elevel %>% as.factor()
+data$car <- data$car %>% as.factor()
+data$zipcode <- data$zipcode %>% as.factor()
+data$brand <- data$brand %>% as.factor()
+```
+
+Education level, car owned, zip code and brand preference are converted from numeric to factors.
+
+```{r}
+##check for outliers
+numericVars <- Filter(is.numeric, data)
+outliers <- numericVars %>% sapply(function(x) boxplot(x, plot=FALSE)$out) %>% str()
+```
+
+There are no outliers.
+
+# **Exploratory Data Analysis**
+
+##Feature Histograms {.tabset}
+
+### Brand Preference Histogram
+```{r}
+#EDA
+
+##Key feature is brand preference, begin with exploring this value.
+
+g6 <- ggplot(data, aes(brand, fill = brand)) +
+        geom_bar() +
+        theme_bw() +
+        scale_fill_brewer(palette="Dark2") +
+        xlab("Brand Preference") + 
+        ylab("Frequency") + 
+        ggtitle("Brand Preference Frequencies")
+g6
+```
+
+We see a clear preference for brand 1 over brand 0. 
+
+### Histogram of other variables
+```{r}
+##review other histograms for skewdness
+histData <- origdata %>% select(-brand)
+g8 <- ggplot(gather(histData), aes(value)) + 
+        geom_histogram(bins = 10, fill = "#D95F02", colour = "white") + 
+        theme_bw() +
+        facet_wrap(~key, scales = 'free_x') +
+        xlab("Value") + 
+        ylab("Count") + 
+        ggtitle("Histograms of Numeric Variables")
+g8
+```
+
+Across the remaining features we see no extreme skewing or noteworthy patterns.
+
+## Brand Choice Plotting {.tabset}
+
+### Brand Choice v Salary
+```{r}
+## Plot Brand choice v other variables
+g1 <- ggplot(data, aes(brand, salary, fill = brand)) +
+        geom_violin() +
+        theme_bw() +
+        scale_fill_brewer(palette="Dark2") +
+        xlab("Brand Preference") + 
+        ylab("Salary ($)") + 
+        ggtitle("Brand Preference v Salary")
+g1 <- ggplotly(g1)
+g1
+```
+
+There is a clear pattern: salaries ranging between 45k - 100k seem to have a preference for brand 0. Salaries outside of this range seem to have a preference for brand 1.
+
+### Brand Choice v Age
+```{r}
+g2 <- ggplot(data, aes(brand, age, fill = brand)) +
+        geom_violin() +
+        theme_bw() +
+        scale_fill_brewer(palette="Dark2") +
+        xlab("Brand Preference") + 
+        ylab("Age") + 
+        ggtitle("Brand Preference v Age")
+g2 <- ggplotly(g2)
+g2
+```
+
+There is no noteworthy pattern between brand preference and age.
+
+### Brand Choice v Education Level
+```{r}
+g3 <- ggplot(data, aes(brand, elevel, colour = brand)) +
+        geom_count() +
+        theme_bw() +
+        scale_color_brewer(palette="Dark2") +
+        xlab("Brand Preference") + 
+        ylab("Education Level") + 
+        ggtitle("Brand Preference v Education Level")
+g3
+```
+
+The general preference for brand 1 is shown in this plot but there also seems to be a consistent preference for brand 1 regardless of education level whereas there seems to be more variation within preference for brand 0 based on the education level.
+
+### Brand Choice v Car 
+```{r}
+g4 <- ggplot(data, aes(brand, car, colour = brand)) +
+        geom_count() +
+        theme_bw() +
+        scale_color_brewer(palette="Dark2") +
+        xlab("Brand Preference") + 
+        ylab("Car") + 
+        ggtitle("Brand Preference v Car")
+g4
+```
+
+The general preference for brand 1 is shown in this plot but there also seems to be a consistent preference for brand 1 regardless of car whereas there seems to be more variation within preference for brand 0 based on the car owned.
+
+### Brand Choice v Zip Code
+```{r}
+g5 <- ggplot(data, aes(brand, zipcode, colour = brand)) +
+        geom_count() +
+        theme_bw() +
+        scale_color_brewer(palette="Dark2") +
+        xlab("Brand Preference") + 
+        ylab("Zip Code") + 
+        ggtitle("Brand Preference v Zip Code")
+g5
+```
+
+The general preference for brand 1 is shown in this plot but there also seems to be a consistent preference for brand 1 regardless of zip code whereas there seems to be more variation within preference for brand 0 based on the car owned.
+
+### Brand Choice v Credit
+```{r}
+g7 <- ggplot(data, aes(brand, credit, fill = brand)) +
+        geom_violin() +
+        theme_bw() +
+        scale_fill_brewer(palette="Dark2") +
+        xlab("Brand Preference") + 
+        ylab("Credit") + 
+        ggtitle("Brand Preference v Credit")
+g7 <- ggplotly(g7)
+g7
+```
+
+There is no noteworthy pattern between brand preference and credit.
+
+## Feature Correlation
+```{r}
+##Review correlation matrix
+corrMatrix <- origdata %>% cor()
+corrMatrix %>% corrplot.mixed()
+```
+
+Reviewing the correlation plot we see very little correlation between the features. This means that colinearity is not an issue that needs to be addressed.
+
+```{r}
+#near zero variance
+nzv <- data %>% nearZeroVar(saveMetrics = TRUE)
+nzv
+```
+
+There are no features with near zero variance.
+
+
+
+## Initial Hypothesis
+
+There is a general preference for brand 1 and salary seems the key feature.
+
+Age and credit seem to have very limited influence on brand preference. Whilst there are patterns of preference within education level, car and zip code, salary appears to have the most striking impact.
+
+Salaries ranging between 45k - 100k seem to have a preference for brand 0. Salaries outside of this range seem to have a preference for brand 1.
+
+# **Modelling**
+
+## Modelling K-Nearest Neighbour
+
+### Data Transformations
+
+Normalisation of data
+
+## Modelling Random Forest
+
+## Modelling Conclusions
+
+# **Conclusions**
+

@@ -9,6 +9,7 @@ library(tidyr)
 library(parallel)
 library(doParallel)
 library(rattle)
+library(kableExtra)
 
 #read in data
 setwd("C:/Users/rhysh/Google Drive/Data Science/Ubiqum/Project 2/Task 2")
@@ -40,6 +41,11 @@ data$brand <- data$brand %>% as.factor()
 numericVars <- Filter(is.numeric, data)
 outliers <- numericVars %>% sapply(function(x) boxplot(x, plot=FALSE)$out) %>% str()
 
+#data distribution
+
+qqnorm(data$salary)
+qqnorm(data$age)
+qqnorm(data$credit)
 
 ##Key feature is brand preference, begin with exploring this value.
 
@@ -158,7 +164,7 @@ g12
 
 #Creating Testing/Training sets
 set.seed(111)
-trainIndex <- createDataPartition(iris$Species, p = 0.75, list = FALSE)
+trainIndex <- createDataPartition(data$brand, p = 0.75, list = FALSE)
 training <- data[ trainIndex,]
 testing  <- data[-trainIndex,]
 
@@ -288,6 +294,22 @@ confMatrixKNN$overall[1:2]
 mNam <- c("KNN", "RF", "GBM")
 Acc <- c(metrics.KNN[1], metrics.RF[1], metrics.GBM[1])
 Kap <- c(metrics.KNN[2], metrics.RF[2], metrics.GBM[2])
-modelResults <- data.frame(mNam,Acc,Kap)
-colnames(modelResults) <- c("Model", "Accuracy", "Kappa")
+Sens <- c(confMatrixKNN$byClass[1], confMatrixRF$byClass[1], confMatrixGBM$byClass[1])
+Spec <- c(confMatrixKNN$byClass[2], confMatrixRF$byClass[2], confMatrixGBM$byClass[2])
+modelResults <- data.frame(mNam,Acc,Kap,Sens,Spec)
+colnames(modelResults) <- c("Model", "Accuracy", "Kappa", "Sensitivity", "Specificity")
+modelResults
+
+##Convert predictions to numerics to allow calculations
+testing$brand <- testing$brand %>% as.numeric()
+testing$brand <- testing$brand -1
+
+testing$predictions.KNN <- testing$predictions.KNN %>% as.numeric()
+testing$predictions.KNN <- testing$predictions.KNN - 1
+
+testing$predictions.RF <- testing$predictions.RF %>% as.numeric()
+testing$predictions.RF <- testing$predictions.RF - 1
+
+testing$predictions.GBM <- testing$predictions.GBM %>% as.numeric()
+testing$predictions.GBM <- testing$predictions.GBM - 1
 

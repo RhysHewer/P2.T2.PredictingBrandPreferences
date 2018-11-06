@@ -313,14 +313,12 @@ For KNN I will take both a fully-featured dataset and a concentrated dataset (br
 ```{r}
 #Creating Testing/Training sets
 set.seed(111)
-trainIndex <- createDataPartition(iris$Species, p = 0.75, list = FALSE)
-
+trainIndex <- createDataPartition(data$brand, p = 0.75, list = FALSE)
 training <- data[ trainIndex,]
 testing  <- data[-trainIndex,]
 
 concData <- data %>% select(brand, age, salary)
 training.conc <- concData[ trainIndex,]
-testing.conc <- concData[-trainIndex,]
 
 #set up parallel processing (requires parallel and doParallel libraries)
 cluster <- makeCluster(detectCores() - 1) 
@@ -377,7 +375,7 @@ KNN scaled and centred with the concentrated featureset was the most promising m
 
 ```{r}
 #tune best KNN model further
-tGridKNN <- expand.grid(k = c(1,2,3,4,5,6))
+tGridKNN <- expand.grid(k = c(6,7,8,9,10))
 finalKNN <- train(brand ~ ., data = training.conc,
                   method = "knn", trControl = fitControl,
                   preProcess = c("center", "scale"),
@@ -401,8 +399,9 @@ testing$predictions.KNN <- predictions.KNN
 #Confusion matrix
 confMatrixKNN <- confusionMatrix(testing$brand, testing$predictions.KNN)
 confMatrixKNN
-postResample(pred = testing$predictions.KNN, obs = testing$brand)
-fourfoldplot(confMatrixKNN$table, conf.level = 0, margin = 1, main = "Confusion Matrix KNN")
+metrics.KNN <- postResample(pred = testing$predictions.KNN, obs = testing$brand)
+metrics.KNN
+fourfoldplot(confMatrixKNN$table, conf.level = 0, margin = 2, main = "Confusion Matrix KNN")
 ```
 
 The Accuracy of the model on the test set was 87% with a kappa of 0.72. These seem to be satisfactory outcomes. Reviewing the confusion matrix we see that the model is doing a fairly good job of classifying brand preference with a slight tendency to overpredict brand 0.
@@ -446,7 +445,8 @@ testing$predictions.RF <- predictions.RF
 #Confusion matrix
 confMatrixRF <- confusionMatrix(testing$brand, testing$predictions.RF)
 confMatrixRF
-postResample(pred = testing$predictions.RF, obs = testing$brand)
+metrics.RF <- postResample(pred = testing$predictions.RF, obs = testing$brand)
+metrics.RF
 fourfoldplot(confMatrixRF$table, conf.level = 0, margin = 1, main = "Confusion Matrix RF")
 ```
 
@@ -459,9 +459,13 @@ Random Forest gives an Accuracy of 86% and a kappa of 0.69.
 #### GBM on Full Featureset
 ```{r}
 ##GBM
+tGridGBM <- expand.grid(n.trees = c(150,200,250), 
+                        interaction.depth = c(3,4), shrinkage = 0.1, 
+                        n.minobsinnode = c(5,10))
+
 model.GBM.brand <- train(brand ~ ., data = training, 
                          method = "gbm", trControl = fitControl,
-                         verbose = FALSE)
+                         verbose = FALSE, tuneGrid = tGridGBM)
 model.GBM.brand
 ```
 
@@ -469,14 +473,11 @@ model.GBM.brand
 #### GBM on Condensed Featureset
 ```{r}
 #concentrated featureset
-tGridGBM <- expand.grid(n.trees = c(150,200,250), 
-                        interaction.depth = c(3,4), shrinkage = 0.1, 
-                        n.minobsinnode = c(5,10))
-
 model.GBM.brand.conc <- train(brand ~ ., data = training.conc, 
                              method = "gbm", trControl = fitControl,
                              verbose = FALSE, tuneGrid = tGridGBM)
-model.GBM.brand.conc 
+
+model.GBM.brand.conc
 ```
 
 The best result for the tuned GBM model on the training set was Accuracy of 87% and 0.67 for Kappa.
@@ -493,13 +494,20 @@ testing$predictions.GBM <- predictions.GBM
 #Confusion matrix
 confMatrixGBM <- confusionMatrix(testing$brand, testing$predictions.GBM)
 confMatrixGBM
-postResample(pred = testing$predictions.GBM, obs = testing$brand)
-fourfoldplot(confMatrixGBM$table, conf.level = 0, margin = 1, main = "Confusion Matrix GBM")
+metrics.GBM <- postResample(pred = testing$predictions.GBM, obs = testing$brand)
+metrics.GBM
+fourfoldplot(confMatrixGBM$table, conf.level = 0, margin = 2, main = "Confusion Matrix GBM")
 ```
 
 For the GBM applied to the test set, the Accuracy was 86% with a Kappa of 0.71.
 
 ## Modelling Conclusions
+
+```{r}
+##Turn off parallel processing
+stopCluster(cluster)
+registerDoSEQ()
+```
 
 ### Model Comparisons
 
@@ -508,12 +516,19 @@ For the GBM applied to the test set, the Accuracy was 86% with a Kappa of 0.71.
 mNam <- c("KNN", "RF", "GBM")
 Acc <- c(metrics.KNN[1], metrics.RF[1], metrics.GBM[1])
 Kap <- c(metrics.KNN[2], metrics.RF[2], metrics.GBM[2])
-modelResults <- data.frame(mNam,Acc,Kap)
-colnames(modelResults) <- c("Model", "Accuracy", "Kappa")
+Sens <- c(confMatrixKNN$byClass[1], confMatrixRF$byClass[1], confMatrixGBM$byClass[1])
+Spec <- c(confMatrixKNN$byClass[2], confMatrixRF$byClass[2], confMatrixGBM$byClass[2])
+modelResults <- data.frame(mNam,Acc,Kap,Sens,Spec)
+colnames(modelResults) <- c("Model", "Accuracy", "Kappa", "Sensitivity", "Specificity")
 
 kable(modelResults) %>%
         kable_styling(bootstrap_options = "striped", full_width = F, position = "left")
 ```
+
+We see that the KNN and GBM models have very similar metrics. This means that we will need to explore further before choosing a final model.
+
+
+
 
 ### Predicting Brand Preference
 

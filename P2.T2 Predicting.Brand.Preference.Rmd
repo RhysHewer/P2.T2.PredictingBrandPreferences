@@ -286,7 +286,7 @@ I have updated the initial hypothesis to now consider that age and salary are th
 ### Colinearity and Variance
 ```{r}
 ##Review correlation matrix
-corrMatrix <- origdata %>% cor()
+corrMatrix <- numericVars %>% cor()
 corrMatrix %>% corrplot.mixed()
 ```
 
@@ -373,6 +373,8 @@ model.KNN.brand.conc.scale
 
 #### KNN - best model tuned
 
+KNN scaled and centred with the concentrated featureset was the most promising model. This model is tuned to improve performance.
+
 ```{r}
 #tune best KNN model further
 tGridKNN <- expand.grid(k = c(1,2,3,4,5,6))
@@ -388,6 +390,8 @@ By tuning the model I was able to increase the accuracy on the training sent to 
 
 ### Testing KNN
 
+KNN (k = 3) scaled and centred with the concentrated featureset was deployed on the test set.
+
 ```{r}
 #Predictions on the test set (model = model name, testing = test set)
 predictions.KNN <- predict(finalKNN, testing)
@@ -397,6 +401,7 @@ testing$predictions.KNN <- predictions.KNN
 #Confusion matrix
 confMatrixKNN <- confusionMatrix(testing$brand, testing$predictions.KNN)
 confMatrixKNN
+postResample(pred = testing$predictions.KNN, obs = testing$brand)
 fourfoldplot(confMatrixKNN$table, conf.level = 0, margin = 1, main = "Confusion Matrix KNN")
 ```
 
@@ -431,6 +436,8 @@ The Accuracy of the best Random Forest model was 90% with a Kappa of 0.75. These
 
 ### Testing Random Forest
 
+Random Forest on the concentrated feature set with mtry = 1 was deployed on the test set.
+
 ```{r}
 ## Test Random Forest
 predictions.RF <- predict(model.RF.brand.conc, testing)
@@ -439,6 +446,7 @@ testing$predictions.RF <- predictions.RF
 #Confusion matrix
 confMatrixRF <- confusionMatrix(testing$brand, testing$predictions.RF)
 confMatrixRF
+postResample(pred = testing$predictions.RF, obs = testing$brand)
 fourfoldplot(confMatrixRF$table, conf.level = 0, margin = 1, main = "Confusion Matrix RF")
 ```
 
@@ -475,6 +483,8 @@ The best result for the tuned GBM model on the training set was Accuracy of 87% 
 
 ### Testing GBM
 
+GBM with the condensed featureset and tuned as followed was used: n.trees = 200,  interaction.depth = 4, shrinkage = 0.1 and n.minobsinnode = 10
+
 ```{r}
 ## Test GBM
 predictions.GBM <- predict(model.GBM.brand.conc, testing)
@@ -483,8 +493,8 @@ testing$predictions.GBM <- predictions.GBM
 #Confusion matrix
 confMatrixGBM <- confusionMatrix(testing$brand, testing$predictions.GBM)
 confMatrixGBM
+postResample(pred = testing$predictions.GBM, obs = testing$brand)
 fourfoldplot(confMatrixGBM$table, conf.level = 0, margin = 1, main = "Confusion Matrix GBM")
-
 ```
 
 For the GBM applied to the test set, the Accuracy was 86% with a Kappa of 0.71.
@@ -496,8 +506,8 @@ For the GBM applied to the test set, the Accuracy was 86% with a Kappa of 0.71.
 ```{r}
 #create results table
 mNam <- c("KNN", "RF", "GBM")
-Acc <- c(confMatrixGBM$overall[1],confMatrixRF$overall[1],confMatrixKNN$overall[1])
-Kap <- c(confMatrixGBM$overall[2],confMatrixRF$overall[2],confMatrixKNN$overall[2])
+Acc <- c(metrics.KNN[1], metrics.RF[1], metrics.GBM[1])
+Kap <- c(metrics.KNN[2], metrics.RF[2], metrics.GBM[2])
 modelResults <- data.frame(mNam,Acc,Kap)
 colnames(modelResults) <- c("Model", "Accuracy", "Kappa")
 

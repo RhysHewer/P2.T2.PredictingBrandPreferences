@@ -40,15 +40,6 @@ data$brand <- data$brand %>% as.factor()
 numericVars <- Filter(is.numeric, data)
 outliers <- numericVars %>% sapply(function(x) boxplot(x, plot=FALSE)$out) %>% str()
 
-#EDA
-
-##QQ plots
-par(mfrow = c(1,3))
-qqnorm(data$salary, main = "QQ plot Salary")
-qqnorm(data$age, main = "QQ plot Age")
-qqnorm(data$credit, main = "QQ plot Credit")
-
-
 
 ##Key feature is brand preference, begin with exploring this value.
 
@@ -132,8 +123,8 @@ g7 <- ggplotly(g7)
 g7
 
 
-##Review correlation matrix
-corrMatrix <- origdata %>% cor()
+##Review correlation matrix numeric data
+corrMatrix <- numericVars %>% cor()
 corrMatrix %>% corrplot.mixed()
 
 #near zero variance
@@ -164,6 +155,7 @@ g12
 
 ## Modelling
 
+
 #Creating Testing/Training sets
 set.seed(111)
 trainIndex <- createDataPartition(iris$Species, p = 0.75, list = FALSE)
@@ -179,7 +171,8 @@ cluster <- makeCluster(detectCores() - 1) # convention to leave 1 core for OS
 registerDoParallel(cluster)
 
 #Cross Validation 10 fold
-fitControl<- trainControl(method = "cv", number = 10, savePredictions = TRUE, allowParallel = TRUE)
+fitControl<- trainControl(method = "cv", number = 10, savePredictions = TRUE, 
+                          allowParallel = TRUE)
 
 
 ##KNN
@@ -223,6 +216,8 @@ testing$predictions.KNN <- predictions.KNN
 #Confusion matrix
 confMatrixKNN <- confusionMatrix(testing$brand, testing$predictions.KNN)
 confMatrixKNN
+metrics.KNN <- postResample(pred = testing$predictions.KNN, obs = testing$brand)
+metrics.KNN
 fourfoldplot(confMatrixKNN$table, conf.level = 0, margin = 1, main = "Confusion Matrix KNN")
 
 
@@ -250,6 +245,8 @@ testing$predictions.RF <- predictions.RF
 #Confusion matrix
 confMatrixRF <- confusionMatrix(testing$brand, testing$predictions.RF)
 confMatrixRF
+metrics.RF <- postResample(pred = testing$predictions.RF, obs = testing$brand)
+metrics.RF
 fourfoldplot(confMatrixRF$table, conf.level = 0, margin = 1, main = "Confusion Matrix RF")
 
 
@@ -278,6 +275,8 @@ testing$predictions.GBM <- predictions.GBM
 #Confusion matrix
 confMatrixGBM <- confusionMatrix(testing$brand, testing$predictions.GBM)
 confMatrixGBM
+metrics.GBM <- postResample(pred = testing$predictions.GBM, obs = testing$brand)
+metrics.GBM
 fourfoldplot(confMatrixGBM$table, conf.level = 0, margin = 1, main = "Confusion Matrix GBM")
 
 confMatrixGBM$overall[1:2]
@@ -287,7 +286,8 @@ confMatrixKNN$overall[1:2]
 
 #create results table
 mNam <- c("KNN", "RF", "GBM")
-Acc <- c(confMatrixGBM$overall[1],confMatrixRF$overall[1],confMatrixKNN$overall[1])
-Kap <- c(confMatrixGBM$overall[2],confMatrixRF$overall[2],confMatrixKNN$overall[2])
+Acc <- c(metrics.KNN[1], metrics.RF[1], metrics.GBM[1])
+Kap <- c(metrics.KNN[2], metrics.RF[2], metrics.GBM[2])
 modelResults <- data.frame(mNam,Acc,Kap)
 colnames(modelResults) <- c("Model", "Accuracy", "Kappa")
+

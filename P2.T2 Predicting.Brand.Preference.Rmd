@@ -34,7 +34,7 @@ REMEMBER!! Combine the data sets at the end!
 ## Recommendations
 
 # **Initial Data Processing**
-```{r message=FALSE}
+```{r message=FALSE, opts_chunk$set(cache=TRUE)} 
 #load libraries
 library(readxl)
 library(dplyr)
@@ -49,6 +49,8 @@ library(parallel)
 library(doParallel)
 library(rattle)
 library(rpart)
+library(gridExtra)
+library(ROCR)
 ```
 ```{r}
 #read in data
@@ -383,12 +385,12 @@ finalKNN <- train(brand ~ ., data = training.conc,
 finalKNN
 ```
 
-By tuning the model I was able to increase the accuracy on the training sent to 93% and the Kappa to 0.83. This brings concerns of overfitting. 
+By tuning the model I was able to increase the accuracy on the training sent to 92% and the Kappa to 0.83. This brings concerns of overfitting. 
 
 
 ### Testing KNN
 
-KNN (k = 3) scaled and centred with the concentrated featureset was deployed on the test set.
+KNN (k = 9) scaled and centred with the concentrated featureset was deployed on the test set.
 
 ```{r}
 #Predictions on the test set (model = model name, testing = test set)
@@ -404,7 +406,7 @@ metrics.KNN
 fourfoldplot(confMatrixKNN$table, conf.level = 0, margin = 2, main = "Confusion Matrix KNN")
 ```
 
-The Accuracy of the model on the test set was 87% with a kappa of 0.72. These seem to be satisfactory outcomes. Reviewing the confusion matrix we see that the model is doing a fairly good job of classifying brand preference with a slight tendency to overpredict brand 0.
+The Accuracy of the model on the test set was 91% with a kappa of 0.82. These seem to be satisfactory outcomes considering the clear delineation of the data. 
 
 ## Modelling Random Forest
 
@@ -480,7 +482,7 @@ model.GBM.brand.conc <- train(brand ~ ., data = training.conc,
 model.GBM.brand.conc
 ```
 
-The best result for the tuned GBM model on the training set was Accuracy of 87% and 0.67 for Kappa.
+The best result for the tuned GBM model on the training set was Accuracy of 93% and 0.84 for Kappa.
 
 ### Testing GBM
 
@@ -499,7 +501,7 @@ metrics.GBM
 fourfoldplot(confMatrixGBM$table, conf.level = 0, margin = 2, main = "Confusion Matrix GBM")
 ```
 
-For the GBM applied to the test set, the Accuracy was 86% with a Kappa of 0.71.
+For the GBM applied to the test set, the Accuracy was 92% with a Kappa of 0.84.
 
 ## Modelling Conclusions
 
@@ -512,25 +514,96 @@ registerDoSEQ()
 ### Model Comparisons
 
 ```{r}
+##Convert predictions to numerics to allow calculations
+testing$brand <- testing$brand %>% as.numeric()
+testing$brand <- testing$brand -1
+
+testing$predictions.KNN <- testing$predictions.KNN %>% as.numeric()
+testing$predictions.KNN <- testing$predictions.KNN - 1
+
+testing$predictions.RF <- testing$predictions.RF %>% as.numeric()
+testing$predictions.RF <- testing$predictions.RF - 1
+
+testing$predictions.GBM <- testing$predictions.GBM %>% as.numeric()
+testing$predictions.GBM <- testing$predictions.GBM - 1
+
+#AUC
+
+#AUC KNN
+pred.KNN <- prediction(testing$predictions.KNN,testing$brand)
+auc.perf.KNN <- performance(pred.KNN, measure = "auc")
+
+#AUC RF
+pred.RF <- prediction(testing$predictions.RF,testing$brand)
+auc.perf.RF <- performance(pred.RF, measure = "auc")
+
+#ROC GBM
+pred.GBM <- prediction(testing$predictions.GBM,testing$brand)
+auc.perf.GBM <- performance(pred.GBM, measure = "auc")
+
 #create results table
 mNam <- c("KNN", "RF", "GBM")
 Acc <- c(metrics.KNN[1], metrics.RF[1], metrics.GBM[1])
 Kap <- c(metrics.KNN[2], metrics.RF[2], metrics.GBM[2])
 Sens <- c(confMatrixKNN$byClass[1], confMatrixRF$byClass[1], confMatrixGBM$byClass[1])
 Spec <- c(confMatrixKNN$byClass[2], confMatrixRF$byClass[2], confMatrixGBM$byClass[2])
-modelResults <- data.frame(mNam,Acc,Kap,Sens,Spec)
-colnames(modelResults) <- c("Model", "Accuracy", "Kappa", "Sensitivity", "Specificity")
+auc <- c(auc.perf.KNN@y.values[[1]], auc.perf.RF@y.values[[1]], auc.perf.GBM@y.values[[1]])
+modelResults <- data.frame(mNam,Acc,Kap,Sens,Spec,auc)
+colnames(modelResults) <- c("Model", "Accuracy", "Kappa", "Sensitivity", "Specificity","AUC")
+
 
 kable(modelResults) %>%
         kable_styling(bootstrap_options = "striped", full_width = F, position = "left")
+
+#Resamples
+reSamps <- resamples(list(GBM = model.GBM.brand.conc,
+                          RF = model.RF.brand.tune,
+                          KNN = finalKNN))
+bwplot(reSamps)
+
 ```
 
-We see that the KNN and GBM models have very similar metrics. This means that we will need to explore further before choosing a final model.
+### Final Model Insights
 
+```{r}
+##Explore Model Insights
+summary(model.GBM.brand.conc)
+```
+
+```{r}
+testing$predictions.GBM <- testing$predictions.GBM %>% as.factor()
+g13 <- ggplot(testing, aes(salary, age, colour = predictions.GBM)) +
+        geom_point(show.legend = FALSE) +
+        facet_grid(predictions.GBM ~ .) +
+        theme_bw() +
+        scale_color_brewer(palette="Dark2") +
+        xlab("Salary") + 
+        ylab("Age") + 
+        ggtitle("Salary v Age by GBM prediction")
+g13
+
+g12
+```
 
 
 
 ### Predicting Brand Preference
+
+```{r}
+#make predictions
+predictions.incomplete <- predict(model.GBM.brand.conc, incomplete)
+incomplete$brand <- predictions.incomplete
+
+g14 <- ggplot(incomplete, aes(salary, age, colour = brand)) +
+        geom_point(show.legend = FALSE) +
+        facet_grid(brand ~ .) +
+        theme_bw() +
+        scale_color_brewer(palette="Dark2") +
+        xlab("Salary") + 
+        ylab("Age") + 
+        ggtitle("Salary v Age by Predicted Brand")
+g14
+```
 
 
 # **Conclusions**

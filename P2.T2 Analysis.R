@@ -10,6 +10,8 @@ library(parallel)
 library(doParallel)
 library(rattle)
 library(kableExtra)
+library(ROCR)
+library(gridExtra)
 
 #read in data
 setwd("C:/Users/rhysh/Google Drive/Data Science/Ubiqum/Project 2/Task 2")
@@ -173,7 +175,7 @@ training.conc <- concData[ trainIndex,]
 
 
 #set up parallel processing (requires parallel and doParallel libraries)
-cluster <- makeCluster(detectCores() - 1) # convention to leave 1 core for OS
+cluster <- makeCluster(detectCores() - 1) 
 registerDoParallel(cluster)
 
 #Cross Validation 10 fold
@@ -205,7 +207,7 @@ model.KNN.brand.conc.scale <- train(brand ~ ., data = training.conc,
 model.KNN.brand.conc.scale
 
 #tune best KNN model further
-tGridKNN <- expand.grid(k = c(1,2,3,4,5,6))
+tGridKNN <- expand.grid(k = c(6,7,8,9,10))
 finalKNN <- train(brand ~ ., data = training.conc,
                   method = "knn", trControl = fitControl,
                   preProcess = c("center", "scale"),
@@ -224,28 +226,28 @@ confMatrixKNN <- confusionMatrix(testing$brand, testing$predictions.KNN)
 confMatrixKNN
 metrics.KNN <- postResample(pred = testing$predictions.KNN, obs = testing$brand)
 metrics.KNN
-fourfoldplot(confMatrixKNN$table, conf.level = 0, margin = 1, main = "Confusion Matrix KNN")
+fourfoldplot(confMatrixKNN$table, conf.level = 0, margin = 2, main = "Confusion Matrix KNN")
 
 
 ## Random Forest
 # Deploy RF model 
 set.seed(111)
-tGridRF <- expand.grid(mtry = c(24,30,35))
+tGridRF <- expand.grid(mtry = c(16,18,20))
 model.RF.brand.tune <- train(brand ~ ., data = training, 
                         method = "rf", trControl = fitControl,
                         tuneGrid = tGridRF)
 model.RF.brand.tune
 
 ## Deploy RF model on concentrated feature set
-tGridRF.conc <- expand.grid(mtry = c(1,2,3,4,5,6))
+tGridRF.conc <- expand.grid(mtry = c(1,2,3))
 model.RF.brand.conc <- train(brand ~ ., data = training.conc, 
                          method = "rf", trControl = fitControl,
                          tuneGrid = tGridRF.conc)
 model.RF.brand.conc 
-varImp(model.RF.brand.conc)
+
 
 ## Test Random Forest
-predictions.RF <- predict(model.RF.brand.conc, testing)
+predictions.RF <- predict(model.RF.brand.tune, testing)
 testing$predictions.RF <- predictions.RF
 
 #Confusion matrix
@@ -257,16 +259,16 @@ fourfoldplot(confMatrixRF$table, conf.level = 0, margin = 1, main = "Confusion M
 
 
 ##GBM
-model.GBM.brand <- train(brand ~ ., data = training, 
-                         method = "gbm", trControl = fitControl,
-                         verbose = FALSE)
-model.GBM.brand
-
-#concentrated featureset
 tGridGBM <- expand.grid(n.trees = c(150,200,250), 
                         interaction.depth = c(3,4), shrinkage = 0.1, 
                         n.minobsinnode = c(5,10))
 
+model.GBM.brand <- train(brand ~ ., data = training, 
+                         method = "gbm", trControl = fitControl,
+                         verbose = FALSE, tuneGrid = tGridGBM)
+model.GBM.brand
+
+#concentrated featureset
 model.GBM.brand.conc <- train(brand ~ ., data = training.conc, 
                              method = "gbm", trControl = fitControl,
                              verbose = FALSE, tuneGrid = tGridGBM)
@@ -283,22 +285,8 @@ confMatrixGBM <- confusionMatrix(testing$brand, testing$predictions.GBM)
 confMatrixGBM
 metrics.GBM <- postResample(pred = testing$predictions.GBM, obs = testing$brand)
 metrics.GBM
-fourfoldplot(confMatrixGBM$table, conf.level = 0, margin = 1, main = "Confusion Matrix GBM")
+fourfoldplot(confMatrixGBM$table, conf.level = 0, margin = 2, main = "Confusion Matrix GBM")
 
-confMatrixGBM$overall[1:2]
-confMatrixRF$overall[1:2]
-confMatrixKNN$overall[1:2]
-
-
-#create results table
-mNam <- c("KNN", "RF", "GBM")
-Acc <- c(metrics.KNN[1], metrics.RF[1], metrics.GBM[1])
-Kap <- c(metrics.KNN[2], metrics.RF[2], metrics.GBM[2])
-Sens <- c(confMatrixKNN$byClass[1], confMatrixRF$byClass[1], confMatrixGBM$byClass[1])
-Spec <- c(confMatrixKNN$byClass[2], confMatrixRF$byClass[2], confMatrixGBM$byClass[2])
-modelResults <- data.frame(mNam,Acc,Kap,Sens,Spec)
-colnames(modelResults) <- c("Model", "Accuracy", "Kappa", "Sensitivity", "Specificity")
-modelResults
 
 ##Convert predictions to numerics to allow calculations
 testing$brand <- testing$brand %>% as.numeric()
@@ -313,3 +301,79 @@ testing$predictions.RF <- testing$predictions.RF - 1
 testing$predictions.GBM <- testing$predictions.GBM %>% as.numeric()
 testing$predictions.GBM <- testing$predictions.GBM - 1
 
+#AUC
+
+#AUC KNN
+pred.KNN <- prediction(testing$predictions.KNN,testing$brand)
+auc.perf.KNN <- performance(pred.KNN, measure = "auc")
+auc.perf.KNN@y.values[[1]]
+
+
+#AUC RF
+pred.RF <- prediction(testing$predictions.RF,testing$brand)
+auc.perf.RF <- performance(pred.RF, measure = "auc")
+auc.perf.RF@y.values[[1]]
+
+#ROC GBM
+pred.GBM <- prediction(testing$predictions.GBM,testing$brand)
+auc.perf.GBM <- performance(pred.GBM, measure = "auc")
+auc.perf.GBM@y.values[[1]]
+
+#create results table
+mNam <- c("KNN", "RF", "GBM")
+Acc <- c(metrics.KNN[1], metrics.RF[1], metrics.GBM[1])
+Kap <- c(metrics.KNN[2], metrics.RF[2], metrics.GBM[2])
+Sens <- c(confMatrixKNN$byClass[1], confMatrixRF$byClass[1], confMatrixGBM$byClass[1])
+Spec <- c(confMatrixKNN$byClass[2], confMatrixRF$byClass[2], confMatrixGBM$byClass[2])
+auc <- c(auc.perf.KNN@y.values[[1]], auc.perf.RF@y.values[[1]], auc.perf.GBM@y.values[[1]])
+modelResults <- data.frame(mNam,Acc,Kap,Sens,Spec,auc)
+colnames(modelResults) <- c("Model", "Accuracy", "Kappa", "Sensitivity", "Specificity","AUC")
+modelResults
+
+#Resamples
+reSamps <- resamples(list(GBM = model.GBM.brand.conc,
+                          RF = model.RF.brand.tune,
+                          KNN = finalKNN))
+
+bwplot(reSamps)
+
+##Turn off parallel processing
+stopCluster(cluster)
+registerDoSEQ()
+
+##Explore Model Insights
+summary(model.GBM.brand.conc)
+
+testing$predictions.GBM <- testing$predictions.GBM %>% as.factor()
+g13 <- ggplot(testing, aes(salary, age, colour = predictions.GBM)) +
+        geom_point(show.legend = FALSE) +
+        facet_grid(predictions.GBM ~ .) +
+        theme_bw() +
+        scale_color_brewer(palette="Dark2") +
+        xlab("Salary") + 
+        ylab("Age") + 
+        ggtitle("Salary v Age by GBM prediction - test set")
+g13
+
+grid.arrange(g12,g13)
+
+##Predicting Brand Preference
+#Update data types
+incomplete$elevel <- incomplete$elevel %>% as.factor()
+incomplete$car <- incomplete$car %>% as.factor()
+incomplete$zipcode <- incomplete$zipcode %>% as.factor()
+incomplete$brand <- incomplete$brand %>% as.factor()
+
+#make predictions
+predictions.incomplete <- predict(model.GBM.brand.conc, incomplete)
+incomplete$brand <- predictions.incomplete
+
+g14 <- ggplot(incomplete, aes(salary, age, colour = brand)) +
+        geom_point(show.legend = FALSE) +
+        facet_grid(brand ~ .) +
+        theme_bw() +
+        scale_color_brewer(palette="Dark2") +
+        xlab("Salary") + 
+        ylab("Age") + 
+        ggtitle("Salary v Age by Predicted Brand")
+g14

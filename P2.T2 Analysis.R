@@ -245,7 +245,6 @@ model.RF.brand.conc <- train(brand ~ ., data = training.conc,
                          tuneGrid = tGridRF.conc)
 model.RF.brand.conc 
 
-
 ## Test Random Forest
 predictions.RF <- predict(model.RF.brand.tune, testing)
 testing$predictions.RF <- predictions.RF
@@ -353,9 +352,10 @@ g13 <- ggplot(testing, aes(salary, age, colour = predictions.GBM)) +
         xlab("Salary") + 
         ylab("Age") + 
         ggtitle("Salary v Age by GBM prediction - test set")
+g13 <- ggplotly(g13)
 g13
 
-grid.arrange(g12,g13)
+
 
 ##Predicting Brand Preference
 #Update data types
@@ -377,3 +377,38 @@ g14 <- ggplot(incomplete, aes(salary, age, colour = brand)) +
         ylab("Age") + 
         ggtitle("Salary v Age by Predicted Brand")
 g14
+
+
+#Combine data
+totalData <- bind_rows(data, incomplete)
+totalData$brand <- totalData$brand %>% factor(labels=c('Acer','Sony'))
+save(totalData, file = "totalData.RDS")
+
+
+##Total brand preference:
+
+
+table(totalData$brand)
+brandData <- table(totalData$brand) %>% as.data.frame()
+colnames(brandData) <- c("Brand", "Total")
+brandData$Percent.Total <- brandData$Total / sum(brandData$Total) * 100
+brandData
+
+
+brandData$Total
+sum(brandData$Total)
+
+g15 <- ggplot(totalData, aes(brand, fill = brand)) + 
+        geom_bar() +
+        theme_bw() +
+        scale_fill_brewer(palette="Dark2") +
+        xlab("Brand Preference") + 
+        ylab("Frequency") + 
+        ggtitle("Total Brand Preference Frequencies") +
+        
+g15
+
+load("totalData.RDS")
+
+summary(model.GBM.brand) %>% head(5)
+

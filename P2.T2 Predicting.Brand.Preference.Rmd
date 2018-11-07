@@ -26,15 +26,34 @@ body .main-container {
 
 # **Executive Summary**
 
-REMEMBER!! Combine the data sets at the end!
-
 ## Objective
+
+Market research was conducted into customer brand preferences. Not all of the brand preference responses were correctly captured. The objective of this analysis is to use the demographic data of the correctly captured responses to predict the brand preferences of those incomplete responses.
+
 ## Method
+
+The correctly captured data was split into a training set (75%) and a testing set (25%). Three machine learning models (K-Nearest Neighbour, Random Forest, Gradient Boosting Machine) were run on the training set to create a series of models.
+
+The most promising of these models, that of the Gradient Boosting Machine, was then run against the test set to allow us to gauge how accurate our model is. We were able to develop a model of approximately 92% accuracy
+
 ## Findings
+
+The finalised model was deployed against the incomplete responses to predict the brand preference. These predicted responses were then combined with the existing responses to form a final data set.
+
+The headline figures of this are that 62% of customers prefer Sony, 38% of customers prefer Acer.
+
+We were also able to define customers who prefer Acer as follows:
+
+* Salary 25k - 75k, Age 60 - 80
+* Salary 75k - 125k, Age 40 - 60
+* Salary 50k - 100k, Age 20 - 40
+
 ## Recommendations
 
+* Further research into the reasons for preferring one brand over another before committing to a deeper strategic relationship.
+
 # **Initial Data Processing**
-```{r message=FALSE, opts_chunk$set(cache=TRUE)} 
+```{r message=FALSE} 
 #load libraries
 library(readxl)
 library(dplyr)
@@ -304,7 +323,7 @@ There are no features with near zero variance.
 
 ### Feature Selection Conclusion
 
-Tree models contain within themselves a degree of feature selection. KNN can benefit from a reduced feature set and centring and scaling of the features. As the KNN algorithm works on finding the 'nearest' neighbour scaling and centring the features ensures that they all have the same scale, and therefore, influence on the model. Leaving he features unscaled means that a feature with a large scale, like salary, could have a disproportionate influence on the model compared to afeature with a smaller scale, like age.
+Tree models contain within themselves a degree of feature selection. KNN can benefit from a reduced feature set and centring and scaling of the features. As the KNN algorithm works on finding the 'nearest' neighbour, scaling and centring the features ensures that they all have the same scale, and therefore, influence on the model. Leaving the features unscaled means that a feature with a large scale, like salary, could have a disproportionate influence on the model compared to a feature with a smaller scale, like age.
 
 As such I will run all models on 2 feature sets. The first is the full feature set, the second is a concentrated feature set (brand, salary, age). The independent features have been chosen based on the decision tree variable importance and the supplementary data analysis which showed a clear pattern between these features.
 
@@ -462,6 +481,7 @@ Random Forest gives an Accuracy of 91% and a kappa of 0.82.
 #### GBM on Full Featureset
 ```{r}
 ##GBM
+set.seed(111)
 tGridGBM <- expand.grid(n.trees = c(150,200,250), 
                         interaction.depth = c(3,4), shrinkage = 0.1, 
                         n.minobsinnode = c(5,10))
@@ -487,11 +507,11 @@ The best result for the tuned GBM model on the training set was Accuracy of 93% 
 
 ### Testing GBM
 
-GBM with the condensed featureset and tuned as followed was used: n.trees = 250, interaction.depth = 3,shrinkage = 0.1 and n.minobsinnode = 10.
+GBM with the full featureset and tuned as followed was used: n.trees = 250, interaction.depth = 3, shrinkage = 0.1 and n.minobsinnode = 5.
 
 ```{r}
 ## Test GBM
-predictions.GBM <- predict(model.GBM.brand.conc, testing)
+predictions.GBM <- predict(model.GBM.brand, testing)
 testing$predictions.GBM <- predictions.GBM
 
 #Confusion matrix
@@ -502,7 +522,7 @@ metrics.GBM
 fourfoldplot(confMatrixGBM$table, conf.level = 0, margin = 2, main = "Confusion Matrix GBM")
 ```
 
-For the GBM applied to the test set, the Accuracy was 92% with a Kappa of 0.84.
+For the GBM applied to the test set, the Accuracy was 92% with a Kappa of 0.82.
 
 ## Modelling Conclusions
 
@@ -556,27 +576,25 @@ colnames(modelResults) <- c("Model", "Accuracy", "Kappa", "Sensitivity", "Specif
 kable(modelResults) %>%
         kable_styling(bootstrap_options = "striped", full_width = F, position = "left")
 
-#Resamples
-reSamps <- resamples(list(GBM = model.GBM.brand.conc,
-                          RF = model.RF.brand.tune,
-                          KNN = finalKNN))
-bwplot(reSamps)
-
 ```
 
 All models performed well once correctly selected and tuned, managing over 90% Accuracy in all cases.
 
 The KNN model which performed the best was based on a concentrated feature set and had the features centred and scaled. The Random Forest model which performed best was that which used the full feature set.
 
-The best performing model, however, was the Gradient Boosting Machine deployed on a concentrated feature set.
+The best performing model, however, was the Gradient Boosting Machine deployed on a full feature set. It had not only the best accuracy of 92% but also the better metrics in almost every category. 
+
 
 
 ### Final Model Insights
 
 ```{r}
 ##Explore Model Insights
-summary(model.GBM.brand.conc)
+summary(model.GBM.brand) %>% head(5)
 ```
+
+We see that of the features that were taken into the model, only 2 play a significant role, with Salary having a slightly bigger effect than Age. These 2 features account for 97% of the relative influence of all the features.
+
 
 ```{r}
 testing$predictions.GBM <- testing$predictions.GBM %>% as.factor()
@@ -590,30 +608,67 @@ g13 <- ggplot(testing, aes(salary, age, colour = predictions.GBM)) +
         ggtitle("Salary v Age by GBM prediction")
 g13
 
-g12
+g12 
 ```
 
+Plotting the predictions of the model by Salary v Age and colouring and faceting by brand preference, we see that the model has done a good job of replicating the pattern that we found during our pre-modelling exploratory data analysis.
 
+I feel confident that we are now able to fairly well define 3 blocks of customers who prefer brand 0 (Acer), with all others preferring brand 1 (Sony).
+
+The model captures the delineation more accurately and there is some bleeding around the margins but in essence the following customers prefer Acer:
+
+* Salary 25k - 75k, Age 60 - 80
+* Salary 75k - 125k, Age 40 - 60
+* Salary 50k - 100k, Age 20 - 40
 
 ### Predicting Brand Preference
 
 ```{r}
+#Update data types
+incomplete$elevel <- incomplete$elevel %>% as.factor()
+incomplete$car <- incomplete$car %>% as.factor()
+incomplete$zipcode <- incomplete$zipcode %>% as.factor()
+incomplete$brand <- incomplete$brand %>% as.factor()
+
 #make predictions
-predictions.incomplete <- predict(model.GBM.brand.conc, incomplete)
+predictions.incomplete <- predict(model.GBM.brand, incomplete)
 incomplete$brand <- predictions.incomplete
 
-g14 <- ggplot(incomplete, aes(salary, age, colour = brand)) +
-        geom_point(show.legend = FALSE) +
-        facet_grid(brand ~ .) +
-        theme_bw() +
-        scale_color_brewer(palette="Dark2") +
-        xlab("Salary") + 
-        ylab("Age") + 
-        ggtitle("Salary v Age by Predicted Brand")
-g14
 ```
 
 
+### Final Combined Data
+
+```{r}
+#Combine data
+totalData <- bind_rows(data, incomplete)
+totalData$brand <- totalData$brand %>% factor(labels=c('Acer','Sony'))
+save(totalData, file = "totalData.RDS")
+```
+
+The original data and the predicted data from the incomplete responses has now been combined and is available for the sales team to review.
+
 # **Conclusions**
 
-## Final Combined Data
+```{r}
+table(totalData$brand)
+
+g15 <- ggplot(totalData, aes(brand, fill = brand)) + 
+        geom_bar() +
+        theme_bw() +
+        scale_fill_brewer(palette="Dark2") +
+        xlab("Brand Preference") + 
+        ylab("Frequency") + 
+        ggtitle("Total Brand Preference Frequencies")
+g15
+```
+
+We see that based purely on numbers, Acer is 60% as popular as Sony. Taking the decision purely on that basis, any strategic partnership that is pursued should be with Sony.
+
+I would strike a note of caution, however. Whilst Sony is the more popular (62% of customers) and Acer the less (38% of customers), the customers preferring Acer still comprise a substantial minority. These customers may be alienated should Acer products become less available.
+
+## Recommendations
+
+I would recommend that we further explore the potential effects of pursuing a strategic partnership with Sony on the behaviours of the current customer base who perfer Acer. This could be done by further research into the reasons for preferring one brand over another to create profiles of "Sony" and "Acer" customers beyond brute demographics. Perhaps there are Sony products that would serve Acer customers if we understood more about the reasons for their preferences.
+
+

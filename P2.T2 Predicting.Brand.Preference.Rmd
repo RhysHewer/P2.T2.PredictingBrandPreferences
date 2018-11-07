@@ -248,7 +248,7 @@ g7
 
 There is a general preference for brand 1 and salary seems the key feature.
 
-Age and credit seem to have very limited influence on brand preference. Whilst there are patterns of preference within education level, car and zip code, salary appears to have the most striking impact.
+Age and credit seem to have limited influence on brand preference. Whilst there are patterns of preference within education level, car and zip code, salary appears to have the most striking impact.
 
 Salaries ranging between 45k - 100k seem to have a preference for brand 0. Salaries outside of this range seem to have a preference for brand 1.
 
@@ -304,9 +304,10 @@ There are no features with near zero variance.
 
 ### Feature Selection Conclusion
 
-The Random Forest algorithm has built-in feature selection so no feature selection required from that perspective.
+Tree models contain within themselves a degree of feature selection. KNN can benefit from a reduced feature set and centring and scaling of the features. As the KNN algorithm works on finding the 'nearest' neighbour scaling and centring the features ensures that they all have the same scale, and therefore, influence on the model. Leaving he features unscaled means that a feature with a large scale, like salary, could have a disproportionate influence on the model compared to afeature with a smaller scale, like age.
 
-For KNN I will take both a fully-featured dataset and a concentrated dataset (brand, salary, age) into the modelling phase and compare results.
+As such I will run all models on 2 feature sets. The first is the full feature set, the second is a concentrated feature set (brand, salary, age). The independent features have been chosen based on the decision tree variable importance and the supplementary data analysis which showed a clear pattern between these features.
+
  
 # **Modelling**
 
@@ -385,7 +386,7 @@ finalKNN <- train(brand ~ ., data = training.conc,
 finalKNN
 ```
 
-By tuning the model I was able to increase the accuracy on the training sent to 92% and the Kappa to 0.83. This brings concerns of overfitting. 
+By tuning the model I was able to increase the accuracy on the training sent to 92% and the Kappa to 0.83. 
 
 
 ### Testing KNN
@@ -415,7 +416,8 @@ The Accuracy of the model on the test set was 91% with a kappa of 0.82. These se
 #### Random Forest on full feature set
 ```{r}
 # Deploy RF model 
-tGridRF <- expand.grid(mtry = c(24,30,35))
+set.seed(111)
+tGridRF <- expand.grid(mtry = c(16,18,20))
 model.RF.brand.tune <- train(brand ~ ., data = training, 
                         method = "rf", trControl = fitControl,
                         tuneGrid = tGridRF)
@@ -425,23 +427,22 @@ model.RF.brand.tune
 #### Random Forest on concentrated feature set
 ```{r}
 ## Deploy RF model on concentrated feature set
-tGridRF.conc <- expand.grid(mtry = c(1,2,3,4,5,6))
+tGridRF.conc <- expand.grid(mtry = c(1,2,3))
 model.RF.brand.conc <- train(brand ~ ., data = training.conc, 
                          method = "rf", trControl = fitControl,
                          tuneGrid = tGridRF.conc)
 model.RF.brand.conc 
-varImp(model.RF.brand.conc)
 ```
 
-The Accuracy of the best Random Forest model was 90% with a Kappa of 0.75. These seem like acceptable values although there is the possibility of overfitting. 
+The Accuracy of the best Random Forest model was 93% with a Kappa of 0.84.
 
 ### Testing Random Forest
 
-Random Forest on the concentrated feature set with mtry = 1 was deployed on the test set.
+Random Forest on the full feature set with mtry = 18 was deployed on the test set.
 
 ```{r}
 ## Test Random Forest
-predictions.RF <- predict(model.RF.brand.conc, testing)
+predictions.RF <- predict(model.RF.brand.tune, testing)
 testing$predictions.RF <- predictions.RF
 
 #Confusion matrix
@@ -452,7 +453,7 @@ metrics.RF
 fourfoldplot(confMatrixRF$table, conf.level = 0, margin = 1, main = "Confusion Matrix RF")
 ```
 
-Random Forest gives an Accuracy of 86% and a kappa of 0.69. 
+Random Forest gives an Accuracy of 91% and a kappa of 0.82. 
 
 ## Modelling Gradient Boosted Machine
 
@@ -486,7 +487,7 @@ The best result for the tuned GBM model on the training set was Accuracy of 93% 
 
 ### Testing GBM
 
-GBM with the condensed featureset and tuned as followed was used: n.trees = 200,  interaction.depth = 4, shrinkage = 0.1 and n.minobsinnode = 10
+GBM with the condensed featureset and tuned as followed was used: n.trees = 250, interaction.depth = 3,shrinkage = 0.1 and n.minobsinnode = 10.
 
 ```{r}
 ## Test GBM
@@ -562,6 +563,13 @@ reSamps <- resamples(list(GBM = model.GBM.brand.conc,
 bwplot(reSamps)
 
 ```
+
+All models performed well once correctly selected and tuned, managing over 90% Accuracy in all cases.
+
+The KNN model which performed the best was based on a concentrated feature set and had the features centred and scaled. The Random Forest model which performed best was that which used the full feature set.
+
+The best performing model, however, was the Gradient Boosting Machine deployed on a concentrated feature set.
+
 
 ### Final Model Insights
 
